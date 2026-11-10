@@ -9,7 +9,7 @@ The package matches Python's results, so these tables are taken from the Python 
 
 Run from the package root:
 
-    python3 tools/gen_tables.py > lib/gunsnprices/unicode_tables.ex
+    python3 tools/gen_tables.py > lib/gunsnprices/unicode_tables.ex && mix format lib/gunsnprices/unicode_tables.ex
 """
 import re
 import sys

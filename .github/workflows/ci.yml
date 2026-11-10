@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # oldest supported (built-in JSON module)
+          - elixir: "1.18"
+            otp: "27"
+          - elixir: "1.19"
+            otp: "28"
+            lint: true
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+      - run: mix deps.get
+      - run: mix format --check-formatted
+        if: matrix.lint
+      - run: mix compile --warnings-as-errors
+      - run: mix test
+      - run: MIX_ENV=dev mix docs
+        if: matrix.lint
+      - run: mix hex.build
+        if: matrix.lint
+
+  tables:
+    # lib/gunsnprices/unicode_tables.ex is generated from Python 3.13's standard library (Unicode 15.1)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.19"
+          otp-version: "28"
+      # line 1 names the exact Python version
+      - run: |
+          python3 tools/gen_tables.py > /tmp/unicode_tables.ex
+          mix format /tmp/unicode_tables.ex
+          diff <(tail -n +2 /tmp/unicode_tables.ex) <(tail -n +2 lib/gunsnprices/unicode_tables.ex)
+        shell: bash

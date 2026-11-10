@@ -121,19 +121,21 @@ defmodule GunsNPrices.Py do
   end
 
   # characters that PCRE2's Unicode \w takes and Python's \w does not (combining marks, connector punctuation)
+  # (an ASCII text has none: checked first with a byte scan, much cheaper than a regex run)
   defp risky?(s) do
-    mp =
+    {non_ascii, mp} =
       case :persistent_term.get({__MODULE__, :risky}, nil) do
         nil ->
           {:ok, mp} = :re.compile("(?!_)[\\p{Mn}\\p{Pc}]", [:unicode])
-          :persistent_term.put({__MODULE__, :risky}, mp)
-          mp
+          t = {:binary.compile_pattern(for(b <- 0x80..0xFF, do: <<b>>)), mp}
+          :persistent_term.put({__MODULE__, :risky}, t)
+          t
 
-        mp ->
-          mp
+        t ->
+          t
       end
 
-    :re.run(s, mp, [{:capture, :none}]) == :match
+    :binary.match(s, non_ascii) != :nomatch and :re.run(s, mp, [{:capture, :none}]) == :match
   end
 
   defp mp_for(%{exact: nil, fast: mp}, _s), do: mp

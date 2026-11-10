@@ -49,7 +49,9 @@ defmodule GunsNPricesTest do
     assert Py.int("١٥") == 15
     assert Py.float("4.02") == 4.02
     t = Py.template(~S"glock \g<2> gen \g<1>")
-    assert Py.sub(Py.compile(~S"\bglock gen\.? ?([1-6]) (\d{2})\b", true), "glock gen 5 19 mos", t) == "glock 19 gen 5 mos"
+
+    assert Py.sub(Py.compile(~S"\bglock gen\.? ?([1-6]) (\d{2})\b", true), "glock gen 5 19 mos", t) ==
+             "glock 19 gen 5 mos"
   end
 
   test "Python string helpers" do
@@ -85,9 +87,16 @@ defmodule GunsNPricesTest do
   test "results encode to JSON with the Python field names" do
     json = GunsNPrices.parse_title("Hornady 6.5 CM 140gr ELD Match 20rds") |> JSON.encode!() |> JSON.decode!()
     assert json["kind"] == "ammo"
-    assert json["caliber"] == %{"id" => "6-5mmcreedmoor", "name" => "6.5mm Creedmoor", "type" => "rifle",
-             "url" => "https://gunsnprices.com/ammo/rifle-ammo/6-5mm-creedmoor"}
+
+    assert json["caliber"] == %{
+             "id" => "6-5mmcreedmoor",
+             "name" => "6.5mm Creedmoor",
+             "type" => "rifle",
+             "url" => "https://gunsnprices.com/ammo/rifle-ammo/6-5mm-creedmoor"
+           }
+
     assert json["rounds"] == 20
+
     assert Map.keys(json) |> Enum.sort() ==
              ~w(barrel_length brand caliber calibers capacity cost_per_round kind model rounds title)
   end

@@ -26,7 +26,9 @@ defmodule GunsNPrices.Models do
     %{
       # airguns and airsoft are not firearms (the site filters them by category; here we go by the title)
       airgun:
-        ci.(~S"\bair\s*-?\s*(?:gun|rifle|pistol)s?\b|\bairgun|\bairsoft|\bbb\s*(?:gun|pistol|rifle)|\bpellets?\b|\bco2\b"),
+        ci.(
+          ~S"\bair\s*-?\s*(?:gun|rifle|pistol)s?\b|\bairgun|\bairsoft|\bbb\s*(?:gun|pistol|rifle)|\bpellets?\b|\bco2\b"
+        ),
       # accessories named after a gun ("Glock 19 holster", "Sig P365 XL 12rd Magazine", "Magpul PMAG for Glock 19").
       # A title that describes a gun (pistol/rifle/..., "15+1", a barrel length) or mentions the item as included
       # ("w/ 3 magazines", "no magazine") is not an accessory.
@@ -99,7 +101,8 @@ defmodule GunsNPrices.Models do
       brand_start: if(d.brand_rx != "", do: ci.(~S"^\W*(?:" <> d.brand_rx <> ")")),
       config_rx: Enum.map(d.configs, fn {name, p} -> {name, ci.(p)} end),
       # (?<![a-z0-9])NAME(?![a-z0-9]): the config is already spelled out in a model name
-      config_in_name: Map.new(d.configs, fn {name, _} -> {name, ci.("(?<![a-z0-9])" <> Py.escape(name) <> "(?![a-z0-9])")} end),
+      config_in_name:
+        Map.new(d.configs, fn {name, _} -> {name, ci.("(?<![a-z0-9])" <> Py.escape(name) <> "(?![a-z0-9])")} end),
       feature_rx: Enum.map(d.features, fn {name, p} -> {name, ci.(p)} end),
       gen_rx: Enum.map(d.gens, fn {label, p} -> {label, ci.(p)} end),
       brand_keys: MapSet.new(d.brand_names, &key/1),
@@ -182,11 +185,14 @@ defmodule GunsNPrices.Models do
     end
   end
 
-  defp norm(s, d) do
+  # Python's _norm(title, d): the part before the dictionary's rewrite rules is the same for every dictionary, so it is
+  # computed once per title (`base/1`)
+  defp base(s) do
     s = s |> Py.html_unescape() |> translate_dashes()
-    s = s |> Py.lower() |> Py.collapse_ws() |> Py.strip()
-    Enum.reduce(d.rewrite, s, fn {rx, to}, s -> Py.sub(rx, s, to) end)
+    s |> Py.lower() |> Py.collapse_ws() |> Py.strip()
   end
+
+  defp norm(base, d), do: Enum.reduce(d.rewrite, base, fn {rx, to}, s -> Py.sub(rx, s, to) end)
 
   def list_brands, do: Enum.map(Data.dicts(), & &1.brand)
 
@@ -258,7 +264,7 @@ defmodule GunsNPrices.Models do
     else
       own =
         if opts[:brand],
-          do: MapSet.member?(d.brand_keys, key(opts[:brand])) or pm != nil,
+          do: MapSet.member?(d.brand_keys, opts[:brand_key]) or pm != nil,
           else: pm != nil or Py.match_at(n.own, t) != nil
 
       models = find_models(t, d)
@@ -348,9 +354,7 @@ defmodule GunsNPrices.Models do
 
   # ---------- terms mode (all other brands): ordered list of model patterns, first match wins ----------
 
-  defp parse_terms(t, brand, d) do
-    bkey = if brand, do: key(brand)
-
+  defp parse_terms(t, brand, bkey, d) do
     cond do
       brand && MapSet.member?(d.deny_keys, bkey) ->
         nil
@@ -392,11 +396,11 @@ defmodule GunsNPrices.Models do
 
   # which matching dictionary wins: the product's own brand -> brand at the start of the title -> brand mentioned
   # earlier (positions in code points, like Python)
-  defp rank(title, d, brand) do
-    if brand && MapSet.member?(d.brand_keys, key(brand)) do
+  defp rank(base, d, opts) do
+    if opts[:brand] && MapSet.member?(d.brand_keys, opts[:brand_key]) do
       {0, 0}
     else
-      t = norm(title, d)
+      t = norm(base, d)
 
       case Py.search(d.brand_any, t) do
         nil ->
@@ -427,9 +431,10 @@ defmodule GunsNPrices.Models do
     s =
       Enum.reduce(r.configs, s, fn c, s ->
         # skip a config already spelled out in the name ("Plus Shield" on "S&W M&P Shield Plus")
-        spelled = Map.get_lazy(d.config_in_name, c, fn ->
-          Py.compile("(?<![a-z0-9])" <> Py.escape(c) <> "(?![a-z0-9])", true)
-        end)
+        spelled =
+          Map.get_lazy(d.config_in_name, c, fn ->
+            Py.compile("(?<![a-z0-9])" <> Py.escape(c) <> "(?![a-z0-9])", true)
+          end)
 
         if not Py.found?(spelled, s) and not MapSet.subset?(words(c), words(s)),
           do: s <> " " <> c,
@@ -443,8 +448,8 @@ defmodule GunsNPrices.Models do
     end)
   end
 
-  defp parse_one(title, d, opts) do
-    t = norm(title, d)
+  defp parse_one(title, base, d, opts) do
+    t = norm(base, d)
     brand = opts[:brand]
 
     cond do
@@ -452,11 +457,11 @@ defmodule GunsNPrices.Models do
         nil
 
       d.terms? ->
-        parse_terms(t, brand, d)
+        parse_terms(t, brand, opts[:brand_key], d)
 
       # the numeric dictionary (Glock) only runs when the brand is given or named in the title;
       # otherwise part-number decoding picks up other brands' codes (CVA "PR3110S" -> "Glock 31")
-      not ((brand && MapSet.member?(d.brand_keys, key(brand))) || Py.found?(d.brand_any, t)) ->
+      not ((brand && MapSet.member?(d.brand_keys, opts[:brand_key])) || Py.found?(d.brand_any, t)) ->
         nil
 
       true ->
@@ -471,11 +476,14 @@ defmodule GunsNPrices.Models do
     if title in [nil, ""] or Py.found?(sh.airgun, title) or accessory?(title, sh) do
       nil
     else
+      base = base(title)
+      opts = Keyword.put(opts, :brand_key, if(opts[:brand], do: key(opts[:brand])))
+
       hits =
         Enum.flat_map(st.dicts, fn d ->
-          case parse_one(title, d, opts) do
+          case parse_one(title, base, d, opts) do
             nil -> []
-            r -> [{rank(title, d, opts[:brand]), d, r}]
+            r -> [{rank(base, d, opts), d, r}]
           end
         end)
 

@@ -1,0 +1,17 @@
+The data files priv/data/models.json and priv/data/calibers.json are
+Copyright (c) 2026 GunsNPrices (https://gunsnprices.com) and are licensed under
+the Creative Commons Attribution 4.0 International License (CC BY 4.0).
+
+You are free to share and adapt them for any purpose, including commercially,
+as long as you give appropriate credit: "GunsNPrices (gunsnprices.com)" with a
+link to https://gunsnprices.com, and indicate if changes were made.
+
+Full license text: https://creativecommons.org/licenses/by/4.0/legalcode
+
+The same data is published as datasets at
+https://huggingface.co/gunsnprices and https://github.com/gunsnprices/firearm-datasets
+
+priv/data/entities.json (HTML character references, as in Python's html module)
+and lib/gunsnprices/unicode_tables.ex (Unicode digits, whitespace and casing
+classes, as in Python's standard library) are generated lookup tables, not
+GunsNPrices data; they are covered by the MIT License with the code.

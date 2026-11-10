@@ -86,7 +86,14 @@ defmodule GunsNPrices do
       end
 
     calibers = Calibers.find_calibers(title)
-    info = %ProductInfo{title: title, kind: kind, brand: opts[:brand] || "", caliber: List.first(calibers), calibers: calibers}
+
+    info = %ProductInfo{
+      title: title,
+      kind: kind,
+      brand: opts[:brand] || "",
+      caliber: List.first(calibers),
+      calibers: calibers
+    }
 
     case kind do
       :ammo ->
